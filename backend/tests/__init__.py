@@ -1,0 +1,3 @@
+"""
+StudyBuddy AI - Tests Package
+"""
