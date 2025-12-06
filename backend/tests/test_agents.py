@@ -18,10 +18,10 @@ class TestContentIngestionAgent:
         
         agent = ContentIngestionAgent()
         # Mock PDF extraction
-        with patch.object(agent, 'extract_pdf_text', new_callable=AsyncMock) as mock:
-            mock.return_value = "Sample PDF content about machine learning."
-            result = await agent.extract_pdf_text("test.pdf")
-            assert "machine learning" in result
+        with patch.object(agent, '_process_pdf', new_callable=AsyncMock) as mock:
+            mock.return_value = {"text": "Sample PDF content about machine learning."}
+            result = await agent._process_pdf("test.pdf")
+            assert "machine learning" in result["text"]
 
     @pytest.mark.asyncio
     async def test_chunk_text(self):
@@ -30,7 +30,7 @@ class TestContentIngestionAgent:
         
         agent = ContentIngestionAgent()
         text = "A" * 1000  # Long text
-        chunks = agent.chunk_text(text, chunk_size=100, overlap=10)
+        chunks = agent._chunk_text(text, source="test.pdf", chunk_size=100, overlap=10)
         
         assert len(chunks) > 1
         assert all(len(c["text"]) <= 110 for c in chunks)
