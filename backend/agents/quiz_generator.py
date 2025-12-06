@@ -342,3 +342,19 @@ class QuizGeneratorAgent(BaseAgent):
         )
         
         return questions[0] if questions else None
+
+    def generate_fallback_question(
+        self,
+        concept: Dict[str, Any],
+        question_type: str = "mcq"
+    ) -> Dict[str, Any]:
+        """Generate a fallback question without LLM."""
+        templates = self._get_question_templates()
+        
+        if question_type == "mcq":
+            return self._generate_mcq(concept, templates, "medium")
+        elif question_type == "true_false":
+            return self._generate_true_false(concept, templates, "medium")
+        else:
+            return self._generate_short_answer(concept, templates, "medium")
+
