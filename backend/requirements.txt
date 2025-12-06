@@ -46,13 +46,14 @@ python-docx==1.1.0
 python-pptx==0.6.23
 
 # Content Processing - Audio/Video
-faster-whisper==0.10.0
+# Content Processing - Audio/Video
+# faster-whisper==0.10.0  # Commented out due to build issues
 pydub==0.25.1
 
 # Content Processing - OCR
 pytesseract==0.3.10
 Pillow==10.2.0
-pdf2image==1.17.0
+# pdf2image==1.17.0  # Commented out due to poppler requirement
 
 # Knowledge Graph
 networkx==3.2.1
