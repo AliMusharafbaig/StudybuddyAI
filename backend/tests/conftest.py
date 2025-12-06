@@ -23,15 +23,10 @@ test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 test_session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create event loop for tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
-@pytest.fixture(scope="session")
+
+@pytest.fixture(scope="function")
 async def setup_database():
     """Setup test database."""
     async with test_engine.begin() as conn:

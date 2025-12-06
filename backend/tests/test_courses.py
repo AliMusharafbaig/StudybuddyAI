@@ -57,7 +57,7 @@ class TestCourseEndpoints:
         course_id = create_response.json()["id"]
         
         update_data = {"name": "Updated Course Name"}
-        response = await client.patch(f"/api/courses/{course_id}", json=update_data, headers=headers)
+        response = await client.put(f"/api/courses/{course_id}", json=update_data, headers=headers)
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Course Name"
 
