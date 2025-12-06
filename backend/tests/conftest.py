@@ -65,11 +65,13 @@ async def client(setup_database) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides.clear()
 
 
+import uuid
+
 @pytest.fixture
 def test_user_data():
     """Test user data."""
     return {
-        "email": "test@example.com",
+        "email": f"test_{uuid.uuid4()}@example.com",
         "password": "testpassword123",
         "full_name": "Test User"
     }
