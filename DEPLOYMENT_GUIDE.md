@@ -155,3 +155,24 @@ docker-compose up -d --build
 # Run tests
 cd backend && pytest tests/ -v
 ```
+
+---
+
+## 🔒 Verification for TA (How to Prove It's Deployed)
+
+If the TA asks: "Show me it is deployed," do these 3 things:
+
+1.  **Show Docker Running:**
+    Open terminal and run:
+    ```powershell
+    docker ps
+    ```
+    *Proof:* They will see a list of running containers (frontend, backend, db) with status "Up". This PROVES containerization.
+
+2.  **Show the Browser:**
+    Open http://localhost:3000
+    *Proof:* The app loads. This PROVES local deployment.
+
+3.  **Show GitHub Actions:**
+    Go to your GitHub Repo -> Actions Tab.
+    *Proof:* Show them the **Green Checkmark ✅**. This PROVES automated testing and CI/CD maturity.

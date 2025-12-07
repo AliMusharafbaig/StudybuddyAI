@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="StudyBuddy AI",
     description="🎓 AI-Powered Study Platform - Your intelligent study companion",
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc"
