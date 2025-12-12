@@ -3,7 +3,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.user import User
 from api.models.course import Course
-from core.security import get_password_hash
+from api.middleware.auth import get_password_hash
 
 # Fixtures for two users
 @pytest.fixture
