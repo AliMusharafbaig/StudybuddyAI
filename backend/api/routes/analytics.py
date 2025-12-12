@@ -220,7 +220,12 @@ async def get_confusion_analysis(
             confusion_score=pattern.confusion_score,
             trigger_count=pattern.trigger_count,
             affected_concepts=affected_concepts,
-            recommended_action=action
+            recommended_action=action,
+            # Simple display fields
+            user_answer=pattern.user_answer,
+            correct_answer=pattern.correct_answer,
+            course_name=pattern.course_name,
+            topic_name=pattern.topic_name
         ))
     
     return response

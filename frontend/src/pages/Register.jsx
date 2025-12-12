@@ -15,8 +15,12 @@ export default function Register() {
         e.preventDefault()
         const result = await register(email, password, fullName)
         if (result.success) {
-            toast.success('Account created!')
-            navigate('/app')
+            toast.success('Account created! Please sign in.')
+            // Mark as new user so walkthrough shows after first login
+            localStorage.setItem('studybuddy_new_user', 'true')
+            localStorage.removeItem('studybuddy_walkthrough')
+            // Redirect to login page - user must sign in first
+            navigate('/login')
         } else {
             toast.error(result.error)
         }

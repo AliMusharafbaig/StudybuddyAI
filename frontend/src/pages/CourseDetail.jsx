@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Upload, FileText, Play, Brain, Target, ArrowLeft, Trash2 } from 'lucide-react'
+import { Upload, FileText, Play, Brain, Target, ArrowLeft, Trash2, RefreshCw, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import api from '../api'
 import toast from 'react-hot-toast'
 
@@ -10,9 +10,52 @@ export default function CourseDetail() {
     const [materials, setMaterials] = useState([])
     const [concepts, setConcepts] = useState([])
     const [uploading, setUploading] = useState(false)
+    const [polling, setPolling] = useState(false)
     const fileRef = useRef()
+    const pollIntervalRef = useRef(null)
 
-    useEffect(() => { loadData() }, [id])
+    useEffect(() => {
+        loadData()
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+            }
+        }
+    }, [id])
+
+    // Start polling when there are pending materials
+    useEffect(() => {
+        const hasPending = materials.some(m => !m.is_processed && m.processing_status !== 'failed')
+
+        if (hasPending && !pollIntervalRef.current) {
+            setPolling(true)
+            pollIntervalRef.current = setInterval(async () => {
+                try {
+                    const [materialsRes, conceptsRes] = await Promise.all([
+                        api.get(`/courses/${id}/materials`),
+                        api.get(`/courses/${id}/concepts`)
+                    ])
+                    setMaterials(materialsRes.data)
+                    setConcepts(conceptsRes.data)
+
+                    // Check if all done
+                    const stillPending = materialsRes.data.some(m => !m.is_processed && m.processing_status !== 'failed')
+                    if (!stillPending) {
+                        clearInterval(pollIntervalRef.current)
+                        pollIntervalRef.current = null
+                        setPolling(false)
+                        toast.success('All materials processed!')
+                    }
+                } catch (e) {
+                    console.error('Poll error:', e)
+                }
+            }, 3000) // Poll every 3 seconds
+        } else if (!hasPending && pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+            setPolling(false)
+        }
+    }, [materials, id])
 
     const loadData = async () => {
         try {
@@ -39,14 +82,36 @@ export default function CourseDetail() {
 
         try {
             await api.post(`/courses/${id}/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 300000 // 5 min timeout for large files
             })
-            toast.success('File uploaded! Processing...')
+            toast.success('File uploaded! Processing started...')
             loadData()
         } catch (e) {
-            toast.error('Upload failed')
+            toast.error(e.response?.data?.detail || 'Upload failed')
         } finally {
             setUploading(false)
+            if (fileRef.current) fileRef.current.value = ''
+        }
+    }
+
+    const triggerReprocess = async () => {
+        try {
+            await api.post(`/courses/${id}/process`)
+            toast.success('Reprocessing started...')
+            loadData()
+        } catch (e) {
+            toast.error('Failed to trigger processing')
+        }
+    }
+
+    const getStatusIcon = (material) => {
+        if (material.is_processed) {
+            return <CheckCircle size={16} color="var(--success)" />
+        } else if (material.processing_status === 'failed') {
+            return <AlertCircle size={16} color="var(--error)" />
+        } else {
+            return <Loader size={16} color="var(--warning)" className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
         }
     }
 
@@ -92,37 +157,94 @@ export default function CourseDetail() {
             {/* Materials */}
             <div style={{ marginBottom: '32px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h2>📚 Materials</h2>
-                    <input type="file" ref={fileRef} onChange={handleUpload} hidden accept=".pdf,.docx,.pptx,.mp4,.mp3" />
-                    <button className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                        <Upload size={18} /> {uploading ? 'Uploading...' : 'Upload'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <h2 style={{ margin: 0 }}>📚 Materials</h2>
+                        {polling && (
+                            <span style={{
+                                padding: '4px 10px',
+                                background: 'rgba(245, 158, 11, 0.2)',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                color: 'var(--warning)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}>
+                                <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                                Processing...
+                            </span>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {materials.some(m => m.processing_status === 'failed') && (
+                            <button className="btn btn-secondary" onClick={triggerReprocess} style={{ padding: '10px 16px' }}>
+                                <RefreshCw size={16} /> Retry Failed
+                            </button>
+                        )}
+                        <input type="file" ref={fileRef} onChange={handleUpload} hidden accept=".pdf,.docx,.pptx,.mp4,.mp3" />
+                        <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                            <Upload size={18} /> {uploading ? 'Uploading...' : 'Upload'}
+                        </button>
+                    </div>
                 </div>
 
                 {materials.length === 0 ? (
-                    <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
-                        <FileText size={40} color="var(--text-muted)" style={{ marginBottom: '12px' }} />
-                        <p style={{ color: 'var(--text-secondary)' }}>No materials yet. Upload PDFs, videos, or audio files.</p>
+                    <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
+                        <FileText size={48} color="var(--text-muted)" style={{ marginBottom: '16px' }} />
+                        <h3 style={{ marginBottom: '8px' }}>No materials yet</h3>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                            Upload PDFs, videos, or audio files to get started
+                        </p>
+                        <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
+                            <Upload size={18} /> Upload Your First File
+                        </button>
                     </div>
                 ) : (
                     <div style={{ display: 'grid', gap: '12px' }}>
                         {materials.map(m => (
-                            <div key={m.id} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <FileText size={24} color="var(--primary)" />
+                            <div key={m.id} className="card" style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '16px',
+                                borderLeft: `4px solid ${m.is_processed ? 'var(--success)' : m.processing_status === 'failed' ? 'var(--error)' : 'var(--warning)'}`
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{
+                                        width: '44px',
+                                        height: '44px',
+                                        background: 'rgba(99, 102, 241, 0.2)',
+                                        borderRadius: '10px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <FileText size={22} color="var(--primary)" />
+                                    </div>
                                     <div>
-                                        <div style={{ fontWeight: 500 }}>{m.original_filename}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            {m.file_type.toUpperCase()} • {(m.file_size / 1024 / 1024).toFixed(1)} MB
+                                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>{m.original_filename}</div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '12px' }}>
+                                            <span>{m.file_type.toUpperCase()}</span>
+                                            <span>{(m.file_size / 1024 / 1024).toFixed(1)} MB</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div style={{
-                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.8rem',
-                                    background: m.is_processed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                                    color: m.is_processed ? 'var(--success)' : 'var(--warning)'
-                                }}>
-                                    {m.is_processed ? 'Processed' : m.processing_status}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    {getStatusIcon(m)}
+                                    <span style={{
+                                        padding: '6px 14px',
+                                        borderRadius: '20px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 500,
+                                        background: m.is_processed ? 'rgba(16, 185, 129, 0.15)' :
+                                            m.processing_status === 'failed' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                        color: m.is_processed ? 'var(--success)' :
+                                            m.processing_status === 'failed' ? 'var(--error)' : 'var(--warning)'
+                                    }}>
+                                        {m.is_processed ? '✓ Processed' :
+                                            m.processing_status === 'failed' ? '✗ Failed' :
+                                                m.processing_status === 'processing' ? 'Processing...' : 'Pending'}
+                                    </span>
                                 </div>
                             </div>
                         ))}

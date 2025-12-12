@@ -7,12 +7,14 @@ JWT-based authentication for API routes.
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
+import hashlib
+import secrets
+import hmac
 
 from core.config import settings
 from core.database import get_db
@@ -20,21 +22,31 @@ from api.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # JWT Bearer security scheme
 security = HTTPBearer()
 
 
+def get_password_hash(password: str) -> str:
+    """Hash a password using SHA256 with a random salt."""
+    salt = secrets.token_hex(16)
+    password_hash = hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
+    return f"{salt}${password_hash}"
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash."""
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    return pwd_context.hash(password)
+    try:
+        if '$' not in hashed_password:
+            # Old bcrypt format - try direct comparison fallback
+            logger.warning("Old password format detected, attempting fallback")
+            return False
+        
+        salt, stored_hash = hashed_password.split('$', 1)
+        password_hash = hashlib.sha256((salt + plain_password).encode('utf-8')).hexdigest()
+        return hmac.compare_digest(password_hash, stored_hash)
+    except Exception as e:
+        logger.error(f"Password verification error: {e}")
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

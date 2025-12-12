@@ -108,11 +108,55 @@ export default function Analytics() {
                 <h3 style={{ marginBottom: '20px' }}><AlertTriangle size={20} style={{ marginRight: '8px', verticalAlign: '-4px' }} />Confusion Patterns</h3>
                 {confusion.length > 0 ? (
                     <div style={{ display: 'grid', gap: '12px' }}>
-                        {confusion.slice(0, 5).map((c, i) => (
-                            <div key={i} style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', borderLeft: '4px solid var(--error)' }}>
-                                <div style={{ fontWeight: 600, marginBottom: '4px' }}>{c.pattern_type}</div>
-                                <p style={{ color: 'var(--text-secondary)', margin: '0 0 8px', fontSize: '0.9rem' }}>{c.description}</p>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Triggered {c.trigger_count} times</div>
+                        {confusion.slice(0, 10).map((c, i) => (
+                            <div key={i} style={{
+                                padding: '16px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                borderRadius: '12px',
+                                borderLeft: '4px solid var(--error)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                                gap: '16px'
+                            }}>
+                                <div style={{ flex: 1 }}>
+                                    {/* What you answered vs Correct answer */}
+                                    {c.user_answer && (
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <span style={{
+                                                textDecoration: 'line-through',
+                                                color: 'var(--error)',
+                                                marginRight: '8px'
+                                            }}>
+                                                {c.user_answer}
+                                            </span>
+                                            <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                → {c.correct_answer || 'N/A'}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Brief explanation */}
+                                    <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem' }}>
+                                        {c.description || c.pattern_type}
+                                    </p>
+                                </div>
+                                {/* Course and Topic on the right */}
+                                <div style={{
+                                    textAlign: 'right',
+                                    fontSize: '0.8rem',
+                                    minWidth: '120px'
+                                }}>
+                                    {c.course_name && (
+                                        <div style={{ color: 'var(--primary)', fontWeight: 600, marginBottom: '4px' }}>
+                                            📚 {c.course_name}
+                                        </div>
+                                    )}
+                                    {c.topic_name && (
+                                        <div style={{ color: 'var(--text-muted)' }}>
+                                            📖 {c.topic_name}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>

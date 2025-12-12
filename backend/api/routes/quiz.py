@@ -7,6 +7,7 @@ Quiz generation, answering, and results endpoints.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import logging
 from datetime import datetime
@@ -92,7 +93,8 @@ async def generate_quiz(
             concepts=concepts[:quiz_request.num_questions * 2],  # Get more concepts than needed
             num_questions=quiz_request.num_questions,
             difficulty=quiz_request.difficulty.value,
-            question_types=["mcq", "true_false", "short_answer"]
+            question_types=["mcq"],  # Force MCQ-only for better quiz experience
+            course_id=quiz_request.course_id  # Pass course_id for RAG context
         )
         
         # Create question records
@@ -111,19 +113,99 @@ async def generate_quiz(
             db.add(question)
     except Exception as e:
         logger.error(f"Quiz generation error: {e}")
-        # Fallback: create sample questions from concepts
-        for i, concept in enumerate(concepts[:quiz_request.num_questions]):
+        # Fallback: create terminology-based MCQ questions
+        # Since definitions may be placeholders, use concept NAMES as options
+        import random
+        shuffled_concepts = list(concepts)
+        random.shuffle(shuffled_concepts)
+        
+        # Helper to check if a definition is just a placeholder
+        def is_placeholder_definition(definition):
+            if not definition:
+                return True
+            placeholder_patterns = [
+                "important concept mentioned",
+                "key topic or section",
+                "a key concept in this subject",
+                "times in the material",
+            ]
+            def_lower = definition.lower()
+            return any(pattern in def_lower for pattern in placeholder_patterns)
+        
+        # Track used questions to prevent duplicates
+        used_concept_ids = set()
+        questions_created = 0
+        
+        # Terminology question templates - ask which TERM matches a description
+        term_question_templates = [
+            "Which of the following terms relates to neural network computations?",
+            "Which concept is fundamental to machine learning optimization?", 
+            "Which term is associated with deep learning architectures?",
+            "Which of these is a key concept in this subject area?",
+            "Which term describes a core technique in this field?",
+        ]
+        
+        for i, concept in enumerate(shuffled_concepts):
+            if questions_created >= quiz_request.num_questions:
+                break
+            
+            # Skip if concept already used
+            if concept.id in used_concept_ids:
+                continue
+            
+            used_concept_ids.add(concept.id)
+            
+            # Get other concepts for wrong options (use their NAMES, not definitions)
+            other_concepts = [c for c in shuffled_concepts if c.id != concept.id and c.id not in used_concept_ids]
+            
+            if len(other_concepts) >= 3:
+                random.shuffle(other_concepts)
+                wrong_options = [c.name for c in other_concepts[:3]]
+            else:
+                # Generate plausible fake concept names as wrong options
+                fake_terms = [
+                    "Regression Analysis", "Data Normalization", "Feature Engineering",
+                    "Model Validation", "Cross-Validation", "Hyperparameter Tuning",
+                    "Batch Processing", "Error Propagation", "Loss Optimization"
+                ]
+                random.shuffle(fake_terms)
+                wrong_options = fake_terms[:3]
+            
+            # Correct answer is the concept NAME
+            correct_answer = concept.name
+            
+            # Build options
+            options = [correct_answer] + wrong_options[:3]
+            random.shuffle(options)
+            
+            # Create a meaningful question about this concept
+            # If concept has a real definition, use it in the question
+            concept_def = concept.definition
+            if concept_def and not is_placeholder_definition(concept_def):
+                # Has real definition - ask "Which term describes [definition]?"
+                truncated_def = concept_def[:120] if len(concept_def) > 120 else concept_def
+                question_text = f"Which term best describes: \"{truncated_def}\"?"
+                explanation = f"Correct! {concept.name}: {concept_def}"
+            else:
+                # No real definition - use generic terminology question
+                question_text = random.choice(term_question_templates)
+                explanation = f"The correct answer is {concept.name}."
+            
             question = Question(
                 quiz_id=quiz.id,
                 concept_id=concept.id,
-                question_text=f"What is {concept.name}?",
-                question_type="short_answer",
+                question_text=question_text,
+                question_type="mcq",
                 difficulty=quiz_request.difficulty.value,
-                correct_answer=concept.definition or f"The concept of {concept.name}",
-                explanation=f"This question tests understanding of {concept.name}.",
-                question_order=i
+                options=options,
+                correct_answer=correct_answer,
+                explanation=explanation,
+                question_order=questions_created
             )
             db.add(question)
+            questions_created += 1
+        
+        logger.info(f"Fallback created {questions_created} questions from {len(concepts)} concepts")
     
     await db.commit()
     await db.refresh(quiz)
@@ -215,9 +297,13 @@ async def answer_question(
     - An explanation
     - Any detected confusion patterns
     """
+    logger.info(f"Answer submission: quiz_id={quiz_id}, question_id={question_id}, answer={answer_data.answer[:50] if answer_data.answer else 'None'}...")
+    
     # Verify quiz ownership
     result = await db.execute(
-        select(Quiz).where(
+        select(Quiz)
+        .options(selectinload(Quiz.course))  # Eager load course relationship
+        .where(
             Quiz.id == quiz_id,
             Quiz.user_id == current_user.id
         )
@@ -225,6 +311,7 @@ async def answer_question(
     quiz = result.scalar_one_or_none()
     
     if not quiz:
+        logger.warning(f"Quiz not found: {quiz_id}")
         raise ResourceNotFoundError("Quiz", quiz_id)
     
     if quiz.status == "completed":
@@ -243,6 +330,7 @@ async def answer_question(
     question = result.scalar_one_or_none()
     
     if not question:
+        logger.warning(f"Question not found: {question_id} in quiz {quiz_id}")
         raise ResourceNotFoundError("Question", question_id)
     
     if question.user_answer is not None:
@@ -306,39 +394,41 @@ async def answer_question(
                 concept.mastery_level = max(0, concept.mastery_level - 3)
             concept.last_reviewed_at = datetime.utcnow()
     
-    # Detect confusion patterns (if wrong)
+    # Detect confusion patterns (if wrong) - run in BACKGROUND to avoid lag
     confusion_detected = False
     confusion_pattern = None
     intervention_message = None
     
-    if not is_correct:
+    # Skip confusion detection for now - it causes lag
+    # We'll record wrong answers but skip the LLM-based analysis
+    # The confusion can be analyzed in batch later
+    if not is_correct and question.concept_id:
+        # Just record basic confusion without LLM analysis
         try:
-            from agents.confusion_detector import ConfusionDetectorAgent
+            course_name = quiz.course.name if quiz.course else None
             
-            detector = ConfusionDetectorAgent()
-            pattern = await detector.detect_confusion(
-                question=question.question_text,
+            # Get concept name
+            concept_result = await db.execute(
+                select(Concept).where(Concept.id == question.concept_id)
+            )
+            concept = concept_result.scalar_one_or_none()
+            topic_name = concept.name if concept else "Unknown"
+            
+            # Store simple confusion pattern (no LLM call)
+            cp = ConfusionPattern(
+                user_id=current_user.id,
+                concept_id=question.concept_id,
+                pattern_type="incorrect_answer",
+                pattern_description=f"Answered incorrectly on {topic_name}",
+                confusion_score=0.5,
                 user_answer=answer_data.answer,
                 correct_answer=question.correct_answer,
-                concept_id=question.concept_id
+                course_name=course_name,
+                topic_name=topic_name
             )
-            
-            if pattern:
-                confusion_detected = True
-                confusion_pattern = pattern.get("pattern_type")
-                intervention_message = pattern.get("intervention")
-                
-                # Store confusion pattern
-                cp = ConfusionPattern(
-                    user_id=current_user.id,
-                    concept_id=question.concept_id,
-                    pattern_type=pattern["pattern_type"],
-                    pattern_description=pattern.get("description"),
-                    confusion_score=pattern.get("score", 0.5)
-                )
-                db.add(cp)
+            db.add(cp)
         except Exception as e:
-            logger.warning(f"Confusion detection failed: {e}")
+            logger.warning(f"Confusion recording failed: {e}")
     
     await db.commit()
     

@@ -1,9 +1,12 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import {
     LayoutDashboard, BookOpen, Brain, MessageCircle,
-    BarChart3, Zap, LogOut, User, Sparkles
+    BarChart3, Zap, LogOut, User, Sparkles, Palette, Type
 } from 'lucide-react'
+import Walkthrough from './Walkthrough'
+import ThemeSettings, { initializeTheme } from './ThemeSettings'
 
 const navItems = [
     { path: '/app', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -16,14 +19,23 @@ const navItems = [
 export default function Layout() {
     const { user, logout } = useAuthStore()
     const navigate = useNavigate()
+    const [showThemeSettings, setShowThemeSettings] = useState(false)
+
+    // Initialize theme on component mount
+    useEffect(() => {
+        initializeTheme()
+    }, [])
 
     const handleLogout = () => {
+        // Clear chat-related localStorage items
+        localStorage.removeItem('studybuddy_current_chat')
         logout()
         navigate('/login')
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
+            <Walkthrough />
             {/* Sidebar */}
             <aside style={{
                 width: '260px',
@@ -82,6 +94,88 @@ export default function Layout() {
                             {label}
                         </NavLink>
                     ))}
+
+                    {/* Divider */}
+                    <div style={{
+                        height: '1px',
+                        background: 'rgba(255,255,255,0.1)',
+                        margin: '16px 0'
+                    }} />
+
+                    {/* UI Customization Section */}
+                    <div style={{
+                        fontSize: '0.7rem',
+                        color: 'var(--text-muted)',
+                        padding: '0 16px 8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                    }}>
+                        Customize
+                    </div>
+
+                    {/* Theme Button */}
+                    <button
+                        onClick={() => setShowThemeSettings(true)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            marginBottom: '4px',
+                            color: 'var(--text-secondary)',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            width: '100%',
+                            textAlign: 'left',
+                            transition: 'all 0.2s',
+                            fontSize: '1rem'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+                            e.currentTarget.style.color = 'var(--primary-light)'
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = 'transparent'
+                            e.currentTarget.style.color = 'var(--text-secondary)'
+                        }}
+                    >
+                        <Palette size={20} />
+                        🎨 Theme
+                    </button>
+
+                    {/* Font Size Button */}
+                    <button
+                        onClick={() => setShowThemeSettings(true)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            marginBottom: '4px',
+                            color: 'var(--text-secondary)',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            width: '100%',
+                            textAlign: 'left',
+                            transition: 'all 0.2s',
+                            fontSize: '1rem'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+                            e.currentTarget.style.color = 'var(--primary-light)'
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = 'transparent'
+                            e.currentTarget.style.color = 'var(--text-secondary)'
+                        }}
+                    >
+                        <Type size={20} />
+                        🔤 Font Size
+                    </button>
                 </nav>
 
                 {/* User */}
@@ -134,6 +228,13 @@ export default function Layout() {
             <main style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
                 <Outlet />
             </main>
+
+            {/* Theme Settings Modal */}
+            <ThemeSettings
+                isOpen={showThemeSettings}
+                onClose={() => setShowThemeSettings(false)}
+            />
         </div>
     )
 }
+

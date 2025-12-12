@@ -186,21 +186,17 @@ class VectorStore:
     
     def search(
         self,
-        course_id: str,
+        course_id: Optional[str],
         query: str,
         top_k: int = 10
     ) -> List[Dict[str, Any]]:
         """
         Search for similar chunks.
-        
-        Args:
-            course_id: Course ID to search in
-            query: Query text
-            top_k: Number of results to return
-        
-        Returns:
-            List of matching chunks with scores
+        If course_id is None, searches ALL courses.
         """
+        if course_id is None:
+            return self._search_all(query, top_k)
+
         index = self._get_or_create_index(course_id)
         
         if index.ntotal == 0:
@@ -241,6 +237,26 @@ class VectorStore:
         
         logger.debug(f"Found {len(results)} results for query in course {course_id}")
         return results
+
+    def _search_all(self, query: str, top_k: int) -> List[Dict[str, Any]]:
+        """Search across all available indices."""
+        # Find all index files
+        all_results = []
+        
+        # Ensure indices are loaded
+        if not os.path.exists(self.index_dir):
+            return []
+            
+        for filename in os.listdir(self.index_dir):
+            if filename.endswith(".faiss"):
+                c_id = filename.replace(".faiss", "")
+                # Search this course
+                results = self.search(c_id, query, top_k=5) # increased recall
+                all_results.extend(results)
+        
+        # Sort by score
+        all_results.sort(key=lambda x: x["score"], reverse=True)
+        return all_results[:top_k]
     
     async def search_async(
         self,

@@ -75,7 +75,7 @@ StudybuddyAI/
 
 ## 👥 Team
 
-Ali Musharaf, Ali Farooq, Fahad Jameel, Laraib Fatima, Abbas
+Ali Musharaf, Ali Farooq, Fahad Jameel, Laraib noor, Abbas
 
 ## 📄 License
 

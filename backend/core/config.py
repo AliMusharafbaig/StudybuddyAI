@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     
     # Google Gemini AI
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_model: str = "gemini-1.5-flash"  # Changed from gemini-2.0-flash-exp (has low quotas)
     
     # Embedding
     embedding_model: str = "all-MiniLM-L6-v2"

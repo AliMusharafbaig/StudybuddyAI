@@ -1,31 +1,28 @@
-"""
-StudyBuddy AI - Chat Routes
-============================
-AI Study Buddy conversational interface.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
-import logging
-from datetime import datetime
-import uuid
+from typing import List, Optional, Dict
 import json
+import logging
+import uuid
+from datetime import datetime
 
 from core.database import get_db
 from api.models.user import User
 from api.models.course import Course
+from api.models.chat import ChatMessage
 from api.schemas import ChatMessageRequest, ChatMessageResponse
 from api.middleware.auth import get_current_user, decode_access_token
 
+# Import Agent and VectorStore safely
+from agents.explanation_builder import ExplanationBuilderAgent
+from core.vector_store import get_vector_store
+
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/chat", tags=["AI Chat"])
+router = APIRouter(prefix="/chat", tags=["Chat"])
 
-
-# Store active conversations (in production, use Redis)
-conversations = {}
-
+# WebSocket connection manager (simplified)
+conversations: Dict[str, List[dict]] = {}
 
 @router.post("/message", response_model=ChatMessageResponse)
 async def send_message(
@@ -34,205 +31,160 @@ async def send_message(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    💬 AI STUDY BUDDY CHAT 💬
-    
-    Send a message to the AI study buddy.
-    
-    - **message**: Your question or message
-    - **course_id**: Optional course context for more relevant answers
-    - **conversation_id**: Optional to continue a conversation
+    Send a message to the AI and get a response.
     """
-    # Get or create conversation
+    # 1. Get or Create Conversation ID
     conv_id = request.conversation_id or str(uuid.uuid4())
-    if conv_id not in conversations:
-        conversations[conv_id] = []
     
-    # Add user message
-    user_msg = ChatMessageResponse(
+    # 2. Save User Message
+    user_msg_entry = ChatMessage(
         id=str(uuid.uuid4()),
+        conversation_id=conv_id,
+        user_id=current_user.id,
+        course_id=request.course_id,
         role="user",
         content=request.message,
-        sources=[],
-        timestamp=datetime.utcnow()
+        created_at=datetime.utcnow()
     )
-    conversations[conv_id].append(user_msg)
+    db.add(user_msg_entry)
+    await db.commit()
     
-    # Get course context if provided
-    course_context = None
-    if request.course_id:
-        result = await db.execute(
-            select(Course).where(
-                Course.id == request.course_id,
-                Course.user_id == current_user.id
-            )
-        )
-        course = result.scalar_one_or_none()
-        if course:
-            course_context = course.name
+    # 3. Get History for Context
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.conversation_id == conv_id)
+        .order_by(ChatMessage.created_at.asc())
+        .limit(10)
+    )
+    history_msgs = result.scalars().all()
     
-    # Generate response using RAG + LLM
+    history_dicts = [
+        {"role": m.role, "content": m.content} for m in history_msgs
+    ]
+    
+    # 4. Generate AI Response
+    response_text = ""
+    sources = []
+    
     try:
-        from agents.explanation_builder import ExplanationBuilderAgent
-        from core.rag import RAGSystem
+        agent = ExplanationBuilderAgent()
+        vector_store = get_vector_store()
         
-        # Use RAG to find relevant context
-        rag = RAGSystem()
-        sources = []
+        # RAG Search - ONLY within user's own courses
+        relevant_chunks = []
         
         if request.course_id:
-            relevant_chunks = await rag.query(
-                query=request.message,
-                course_id=request.course_id,
-                top_k=5
+            # Course-specific search - verify user owns this course first
+            course_check = await db.execute(
+                select(Course).where(
+                    Course.id == request.course_id,
+                    Course.user_id == current_user.id
+                )
             )
-            sources = [
-                {"source": chunk.get("source", "Course Material"), "page": chunk.get("page")}
-                for chunk in relevant_chunks
-            ]
+            if course_check.scalar_one_or_none():
+                relevant_chunks = vector_store.search(
+                    course_id=request.course_id,
+                    query=request.message,
+                    top_k=3
+                )
+        else:
+            # Global search - but ONLY user's courses
+            user_courses = await db.execute(
+                select(Course.id).where(Course.user_id == current_user.id)
+            )
+            user_course_ids = [c[0] for c in user_courses.fetchall()]
+            
+            # Search each user's course and combine results
+            all_results = []
+            for course_id in user_course_ids:
+                course_results = vector_store.search(
+                    course_id=course_id,
+                    query=request.message,
+                    top_k=3
+                )
+                all_results.extend(course_results)
+            
+            # Sort by score and take top results
+            all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            relevant_chunks = all_results[:3]
         
-        # Generate response
-        agent = ExplanationBuilderAgent()
+        # Format retrieval context
+        context_str_list = [c.get('text', '') for c in relevant_chunks]
+        
         response_text = await agent.answer_question(
             question=request.message,
-            context=relevant_chunks if request.course_id else None,
-            conversation_history=conversations[conv_id][-5:]  # Last 5 messages
+            context=context_str_list,
+            conversation_history=history_dicts
         )
         
+        # Format sources for UI
+        sources = [
+            {"title": c.get("source", "Material"), "preview": c.get("text", "")[:50] + "..."}
+            for c in relevant_chunks
+        ]
+        
     except Exception as e:
-        logger.warning(f"Chat response generation failed: {e}")
-        # Fallback response
-        if course_context:
-            response_text = f"I'd be happy to help you with {course_context}! Could you provide more details about what you'd like to learn? I can explain concepts, help with practice problems, or clarify any confusion."
-        else:
-            response_text = "Hello! I'm your AI Study Buddy. I can help you understand concepts, prepare for exams, and answer questions about your courses. What would you like to learn about today?"
-        sources = []
+        import traceback
+        logger.error(f"AI Generation Failed: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        response_text = f"I'm having trouble connecting to my brain right now. Error: {str(e)[:100]}"
     
-    # Create assistant response
-    assistant_msg = ChatMessageResponse(
+    # 5. Save AI Message
+    ai_msg_entry = ChatMessage(
         id=str(uuid.uuid4()),
+        conversation_id=conv_id,
+        user_id=current_user.id,
+        course_id=request.course_id,
+        role="assistant",
+        content=response_text,
+        created_at=datetime.utcnow()
+    )
+    db.add(ai_msg_entry)
+    await db.commit()
+    
+    return ChatMessageResponse(
+        id=ai_msg_entry.id,
         role="assistant",
         content=response_text,
         sources=sources,
-        timestamp=datetime.utcnow()
+        timestamp=ai_msg_entry.created_at,
+        conversation_id=conv_id
     )
-    conversations[conv_id].append(assistant_msg)
-    
-    return assistant_msg
 
-
-@router.get("/history/{conversation_id}", response_model=List[ChatMessageResponse])
-async def get_conversation_history(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user)
+@router.get("/history", response_model=List[ChatMessageResponse])
+async def get_chat_history(
+    course_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Get the conversation history.
+    Get chat history for a user (optionally filtered by course).
     """
-    if conversation_id not in conversations:
-        return []
+    query = select(ChatMessage).where(ChatMessage.user_id == current_user.id)
+    if course_id:
+        query = query.where(ChatMessage.course_id == course_id)
+        
+    query = query.order_by(ChatMessage.created_at.desc()).limit(50)
     
-    return conversations[conversation_id]
-
-
-@router.delete("/history/{conversation_id}")
-async def clear_conversation(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Clear a conversation history.
-    """
-    if conversation_id in conversations:
-        del conversations[conversation_id]
+    result = await db.execute(query)
+    messages = result.scalars().all()
     
-    return {"message": "Conversation cleared"}
+    # Reverse to chronological order
+    messages = list(reversed(messages))
+    
+    return [
+        ChatMessageResponse(
+            id=msg.id,
+            role=msg.role,
+            content=msg.content,
+            sources=[], 
+            timestamp=msg.created_at,
+            conversation_id=msg.conversation_id
+        )
+        for msg in messages
+    ]
 
-
-# WebSocket for real-time chat
+# WebSocket endpoint (Optional, keeping for compatibility if frontend uses it)
 @router.websocket("/ws/{token}")
-async def websocket_chat(
-    websocket: WebSocket,
-    token: str
-):
-    """
-    WebSocket endpoint for real-time chat.
-    
-    Connect with: ws://host/api/chat/ws/{jwt_token}
-    """
-    # Validate token
-    payload = decode_access_token(token)
-    if not payload:
-        await websocket.close(code=4001)
-        return
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        await websocket.close(code=4001)
-        return
-    
-    await websocket.accept()
-    
-    # Create conversation for this session
-    conv_id = str(uuid.uuid4())
-    conversations[conv_id] = []
-    
-    try:
-        while True:
-            # Receive message
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            
-            user_message = message_data.get("message", "")
-            course_id = message_data.get("course_id")
-            
-            # Add user message
-            user_msg = {
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": user_message,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            conversations[conv_id].append(user_msg)
-            
-            # Send acknowledgment
-            await websocket.send_json({
-                "type": "user_message",
-                "data": user_msg
-            })
-            
-            # Generate response (simplified for WebSocket)
-            try:
-                from agents.explanation_builder import ExplanationBuilderAgent
-                
-                agent = ExplanationBuilderAgent()
-                response_text = await agent.answer_question(
-                    question=user_message,
-                    context=None,
-                    conversation_history=conversations[conv_id][-5:]
-                )
-            except Exception:
-                response_text = "I'm here to help! What would you like to learn about?"
-            
-            # Send response
-            assistant_msg = {
-                "id": str(uuid.uuid4()),
-                "role": "assistant",
-                "content": response_text,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            conversations[conv_id].append(assistant_msg)
-            
-            await websocket.send_json({
-                "type": "assistant_message",
-                "data": assistant_msg
-            })
-            
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for user {user_id}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=4000)
-    finally:
-        # Cleanup conversation after disconnect
-        if conv_id in conversations:
-            del conversations[conv_id]
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    await websocket.close(code=1000, reason="Use REST API instead")

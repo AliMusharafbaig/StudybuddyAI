@@ -31,18 +31,14 @@ export const useAuthStore = create(
             register: async (email, password, fullName) => {
                 set({ isLoading: true })
                 try {
-                    const { data } = await api.post('/auth/register', {
+                    // Just create the account - don't auto-login
+                    await api.post('/auth/register', {
                         email,
                         password,
                         full_name: fullName
                     })
-                    set({
-                        user: data.user,
-                        token: data.access_token,
-                        isAuthenticated: true,
-                        isLoading: false
-                    })
-                    api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`
+                    // Don't set auth state - user should login separately
+                    set({ isLoading: false })
                     return { success: true }
                 } catch (error) {
                     set({ isLoading: false })
@@ -62,6 +58,20 @@ export const useAuthStore = create(
                 }
             }
         }),
-        { name: 'studybuddy-auth' }
+        {
+            name: 'studybuddy-auth',
+            partialize: (state) => ({
+                user: state.user,
+                token: state.token,
+                isAuthenticated: state.isAuthenticated
+                // CRITICAL: Never persist isLoading state to prevent frozen buttons
+            }),
+            onRehydrateStorage: () => (state) => {
+                // Ensure isLoading is always false after rehydration
+                if (state) {
+                    state.isLoading = false
+                }
+            }
+        }
     )
 )

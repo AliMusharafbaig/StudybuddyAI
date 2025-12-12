@@ -23,6 +23,7 @@ from api.routes import (
     mnemonic_router,
     chat_router
 )
+from api.routes.exam_prediction import router as exam_router
 
 # Setup logging
 logger = setup_logging()
@@ -59,7 +60,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,6 +83,7 @@ app.include_router(analytics_router, prefix="/api")
 app.include_router(cram_router, prefix="/api")
 app.include_router(mnemonic_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(exam_router, prefix="/api")  # NEW: Exam Prediction
 
 
 @app.get("/")

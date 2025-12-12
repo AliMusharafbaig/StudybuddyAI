@@ -108,6 +108,12 @@ class ConfusionPattern(Base):
     pattern_description = Column(Text, nullable=True)
     confusion_score = Column(Float, default=0.5)  # 0-1 severity
     
+    # Simple error tracking (what the user wants)
+    user_answer = Column(Text, nullable=True)  # What the user answered
+    correct_answer = Column(Text, nullable=True)  # What the correct answer was
+    course_name = Column(String(255), nullable=True)  # Course name for display
+    topic_name = Column(String(255), nullable=True)  # Topic/concept name for display
+    
     # Detection
     trigger_count = Column(Integer, default=1)
     last_triggered_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -270,13 +270,41 @@ class ConfusionAnalysisResponse(BaseModel):
     trigger_count: int
     affected_concepts: List[str] = []
     recommended_action: str
+    # Simple display fields (what the user wants)
+    user_answer: Optional[str] = None  # What user answered
+    correct_answer: Optional[str] = None  # What was correct
+    course_name: Optional[str] = None  # Course name
+    topic_name: Optional[str] = None  # Topic/concept name
 
 
 # ============================================
 # Exam Prediction Schemas
 # ============================================
 
-class ExamPredictionResponse(BaseModel):
+class ExamPredictionRequest(BaseModel):
+    course_id: str
+    num_predictions: int = Field(10, ge=1, le=30)
+    include_solutions: bool = False
+
+
+class ExamQuestionResponse(BaseModel):
+    question_text: str
+    question_type: str = "problem_solving"
+    exam_probability: int = Field(..., ge=0, le=100)
+    difficulty: str = "medium"
+    concept_name: str
+    solution: Optional[str] = None
+
+
+class ExamPredictionDetailResponse(BaseModel):
+    id: str
+    course_id: str
+    predicted_questions: List[ExamQuestionResponse]
+    created_at: datetime
+
+
+# Legacy schemas (kept for compatibility)
+class ExamPredictionResponseLegacy(BaseModel):
     topic: str
     probability: float  # 0-1
     importance: int  # 1-10
@@ -284,11 +312,16 @@ class ExamPredictionResponse(BaseModel):
     sample_questions: List[str] = []
 
 
-class ExamPredictionsResponse(BaseModel):
+class ExamPredictionsResponseLegacy(BaseModel):
     course_id: str
-    predictions: List[ExamPredictionResponse]
+    predictions: List[ExamPredictionResponseLegacy]
     overall_readiness: float  # 0-100
     recommended_focus_areas: List[str] = []
+
+
+# Aliases for backward compatibility with analytics.py imports
+ExamPredictionsResponse = ExamPredictionsResponseLegacy
+ExamPredictionResponse = ExamPredictionResponseLegacy
 
 
 # ============================================
@@ -354,6 +387,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     sources: List[dict] = []  # Citations from course materials
     timestamp: datetime
+    conversation_id: Optional[str] = None
 
 
 # ============================================
