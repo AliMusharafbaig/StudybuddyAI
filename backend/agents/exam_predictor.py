@@ -215,12 +215,15 @@ Generate exactly {num_predictions} high-probability exam questions. Return ONLY 
             except Exception as e:
                 logger.warning(f"Failed to get RAG context for solution: {e}")
         
+        # Build context section (avoid backslash in f-string for Python 3.11 compatibility)
+        context_section = f"Relevant course material:\n{context}" if context else ""
+        
         prompt = f"""You are an expert professor providing detailed exam solutions.
 
 Question: {question}
 Concept: {concept_name}
 
-{("Relevant course material:\n" + context) if context else ""}
+{context_section}
 
 Provide a DETAILED, STEP-BY-STEP solution that:
 1. Breaks down the problem clearly
