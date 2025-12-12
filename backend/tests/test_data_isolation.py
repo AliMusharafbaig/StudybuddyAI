@@ -11,7 +11,7 @@ async def user_a(db_session: AsyncSession):
     user = User(
         email="usera@example.com",
         full_name="User A",
-        hashed_password=get_password_hash("passwordA")
+        password_hash=get_password_hash("passwordA")
     )
     db_session.add(user)
     await db_session.commit()
@@ -23,7 +23,7 @@ async def user_b(db_session: AsyncSession):
     user = User(
         email="userb@example.com",
         full_name="User B",
-        hashed_password=get_password_hash("passwordB")
+        password_hash=get_password_hash("passwordB")
     )
     db_session.add(user)
     await db_session.commit()
