@@ -1,65 +1,32 @@
-# System Architecture Diagram
+# StudyBuddy AI - System Architecture
 
-This diagram represents the logical flow of the StudyBuddy AI platform.
+This diagram represents the complete architecture of the StudyBuddy AI platform.
 
-```mermaid
-graph TD
-    %% User Layer
-    User[👤 Student] -->|HTTPS| Frontend[� React Frontend]
-    Frontend -->|REST API| API_Gateway[🛡️ FastAPI Gateway]
+![StudyBuddy AI System Architecture](docs/architecture.png)
 
-    %% Backend Layer
-    subgraph "Backend Services"
-        API_Gateway -->|Auth Check| Auth[🔐 Auth Service]
-        API_Gateway -->|Request Routing| Orchestrator[🧠 Agent Orchestrator]
-        
-        %% The Core "Brain" Logic
-        Orchestrator -->|Delegates Task| AgentLayer
-    end
+## Layer Overview
 
-    %% Agent Layer (Parallel Capabilities)
-    subgraph "Agentic Layer (LangChain)"
-        direction TB
-        AgentLayer{Select Agent}
-        
-        Agent_Ingest[📥 Ingestion Agent]
-        Agent_Quiz[📝 Quiz Generator]
-        Agent_Chat[� Chat/RAG Agent]
-        Agent_Analysis[📊 Concept Extractor]
-        
-        AgentLayer -->|Uploads| Agent_Ingest
-        AgentLayer -->|Study| Agent_Quiz
-        AgentLayer -->|Q&A| Agent_Chat
-        AgentLayer -->|Analyze| Agent_Analysis
-    end
+| Layer | Components | Description |
+|-------|-----------|-------------|
+| **Layer 1: User Interface** | React Frontend, React Router, Axios, Lucide Icons | Student-facing web application with real-time updates |
+| **Layer 2: API Gateway** | FastAPI, Auth Service, Rate Limiter, Pydantic, SQLAlchemy | RESTful API with JWT authentication and request validation |
+| **Layer 3: Orchestration** | Agent Orchestrator, Cram Mode | Central brain that routes requests to specialized AI agents |
+| **Layer 4: AI Agents** | Content Ingestion, Concept Extractor, Quiz Generator, Exam Predictor, Confusion Detector, Explanation Builder | Six specialized agents for different learning tasks |
+| **Layer 5: RAG Pipeline** | Vector Store (FAISS), RAG Engine, Embeddings, LangChain | Retrieval-Augmented Generation for context-aware responses |
+| **Layer 6: Data & AI** | SQLite Database, Gemini Pro LLM | Persistent storage and AI inference |
+| **Layer 7: Storage** | Course Materials, User Data, Analytics Dashboard | PDFs, slides, user profiles, and progress tracking |
 
-    %% Data Processing & Storage (The "Tools")
-    subgraph "Data & RAG Infrastructure"
-        Agent_Ingest -->|Writes| FAISS[(Vector DB - FAISS)]
-        Agent_Ingest -->|Writes| SQL[(PostgreSQL)]
-        
-        Agent_Chat -->|Retrieves| FAISS
-        Agent_Chat -->|Context Injection| Gemini[🤖 Gemini Pro LLM]
-        
-        Agent_Quiz -->|Reads| SQL
-        Agent_Quiz -->|Generates| Gemini
-    end
+## Key Technologies
 
-    %% Feedback Loops
-    Gemini -->|Response| Agent_Chat
-    Gemini -->|Questions| Agent_Quiz
-    
-    %% Return Path
-    Agent_Chat -->|Stream| API_Gateway
-    Agent_Quiz -->|JSON| API_Gateway
-
-    %% Styling
-    style User fill:#f9f,stroke:#333,stroke-width:2px
-    style GEMINI fill:#cff,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
-    style FAISS fill:#ff9,stroke:#333,stroke-width:2px
-```
+- **Frontend**: React, React Router, Axios, Lucide Icons, CSS
+- **Backend**: FastAPI, Pydantic, SQLAlchemy, Python async/await
+- **AI/ML**: Google Gemini Pro, LangChain, Sentence-Transformers
+- **Storage**: SQLite, FAISS Vector Store
+- **Security**: JWT, bcrypt, CORS
 
 ## Architectural Justification
-1.  **Central Orchestrator:** All requests go through a central router that decides *which* agent is best suited for the task.
-2.  **Parallel Agents:** The Quiz Agent and RAG Agent are peers. RAG is a capability used by the Chat Agent.
-3.  **Shared Resources:** All agents utilize the same underlying Data Layer (FAISS/SQL) and the same Intelligence Layer (Gemini LLM).
+
+1. **Central Orchestrator**: All requests go through a central router that decides which agent is best suited for the task.
+2. **Multi-Agent System**: Six specialized agents work in parallel, each focused on a specific learning capability.
+3. **RAG Pipeline**: Combines vector search with LLM generation for accurate, context-aware responses.
+4. **Shared Resources**: All agents utilize the same Data Layer (FAISS/SQLite) and Intelligence Layer (Gemini Pro).
