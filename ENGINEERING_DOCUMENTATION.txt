@@ -1,0 +1,1108 @@
+================================================================================
+                    STUDYBUDDY AI - COMPLETE ENGINEERING DOCUMENTATION
+================================================================================
+
+This document contains the complete technical specification and engineering 
+details of the StudyBuddy AI platform. It covers every aspect of the system
+from frontend to backend, including all AI agents, RAG pipeline, database 
+design, and deployment configuration.
+
+================================================================================
+SECTION 1: PROJECT INTRODUCTION
+================================================================================
+
+1.1 PROJECT OVERVIEW
+--------------------
+StudyBuddy AI is an intelligent, AI-powered educational platform designed to 
+revolutionize how students learn and prepare for exams. The platform leverages
+cutting-edge artificial intelligence, specifically Google's Gemini Pro Large
+Language Model (LLM), combined with Retrieval-Augmented Generation (RAG) to
+provide personalized, context-aware learning experiences.
+
+1.2 PROBLEM STATEMENT
+---------------------
+Traditional study methods lack personalization and intelligent feedback. Students
+often struggle with:
+- Understanding which concepts to prioritize
+- Getting immediate, accurate answers to questions
+- Identifying their knowledge gaps
+- Generating practice questions relevant to their course materials
+- Predicting what might appear on exams
+
+1.3 SOLUTION
+------------
+StudyBuddy AI addresses these challenges through a multi-agent AI system that:
+- Processes any course material (PDFs, documents, presentations)
+- Extracts key educational concepts automatically
+- Generates personalized quizzes based on course content
+- Answers questions using course-specific context (RAG)
+- Detects and addresses student confusion patterns
+- Predicts likely exam questions based on content analysis
+- Provides adaptive learning experiences
+
+1.4 KEY FEATURES
+----------------
+• Intelligent Content Processing: Automatic extraction and analysis of course materials
+• AI-Powered Chat: Context-aware Q&A using RAG with course materials
+• Smart Quiz Generation: Personalized quizzes based on extracted concepts
+• Exam Prediction: AI analysis of likely exam questions
+• Confusion Detection: Identifies weak areas and provides targeted interventions
+• Cram Mode: Focused study sessions for exam preparation
+• Analytics Dashboard: Progress tracking and learning insights
+
+
+================================================================================
+SECTION 2: SYSTEM ARCHITECTURE DIAGRAM
+================================================================================
+
+[SEE ATTACHED ARCHITECTURE DIAGRAM: docs/architecture.png]
+
+The architecture diagram shows the complete system with 7 layers:
+- Layer 1: User Interface (React Frontend)
+- Layer 2: API Gateway (FastAPI Backend)  
+- Layer 3: Agent Orchestrator (Central Brain)
+- Layer 4: AI Agents (6 specialized agents)
+- Layer 5: RAG Pipeline (LangChain integration)
+- Layer 6: Data & AI Infrastructure
+- Layer 7: Storage Layer
+
+
+================================================================================
+SECTION 3: TECHNOLOGY STACK
+================================================================================
+
+3.1 FRONTEND TECHNOLOGIES
+-------------------------
+• React 18.x - Modern JavaScript UI library
+• React Router v6 - Client-side routing and navigation
+• Axios - HTTP client for API communication
+• Lucide React - Modern icon library
+• React Hot Toast - Toast notifications
+• CSS3 - Custom styling with modern features
+• LocalStorage API - Client-side state persistence
+
+3.2 BACKEND TECHNOLOGIES
+------------------------
+• Python 3.11+ - Core programming language
+• FastAPI - High-performance async web framework
+• Pydantic - Data validation and serialization
+• SQLAlchemy 2.0 - Async ORM for database operations
+• aiosqlite - Async SQLite database driver
+• Uvicorn - ASGI server for production
+• Python-Jose - JWT token handling
+• Passlib + bcrypt - Password hashing
+
+3.3 AI/ML TECHNOLOGIES
+----------------------
+• Google Gemini Pro 1.5 - Large Language Model (LLM)
+• LangChain - LLM application framework
+• Sentence-Transformers - Text embedding models
+  - Model: all-MiniLM-L6-v2 (384-dimensional embeddings)
+• FAISS (Facebook AI Similarity Search) - Vector similarity search
+• PyPDF2 + pdfplumber - PDF text extraction
+• python-docx - DOCX file processing
+• python-pptx - PowerPoint file processing
+
+3.4 DATABASE & STORAGE
+----------------------
+• SQLite - Relational database (async via aiosqlite)
+• FAISS - Vector database for semantic search
+• File System - Course material storage
+
+3.5 DEVOPS & DEPLOYMENT
+-----------------------
+• Docker - Containerization
+• Docker Compose - Multi-container orchestration
+• GitHub Actions - CI/CD pipeline
+• pytest - Testing framework
+• flake8 - Code linting
+
+
+================================================================================
+SECTION 4: FRONTEND ARCHITECTURE
+================================================================================
+
+4.1 PROJECT STRUCTURE
+---------------------
+frontend/
+├── src/
+│   ├── components/        # Reusable UI components
+│   │   ├── Layout.jsx     # Main application layout
+│   │   ├── Sidebar.jsx    # Navigation sidebar
+│   │   ├── CourseCard.jsx # Course display component
+│   │   └── ...
+│   ├── pages/             # Route pages
+│   │   ├── Dashboard.jsx  # Main dashboard
+│   │   ├── Login.jsx      # Authentication
+│   │   ├── Register.jsx   # User registration
+│   │   ├── Chat.jsx       # AI chat interface
+│   │   ├── Quiz.jsx       # Quiz taking
+│   │   ├── CramMode.jsx   # Focused study mode
+│   │   └── ...
+│   ├── store/             # State management
+│   │   └── authStore.js   # Authentication state
+│   ├── api/               # API client
+│   │   └── index.js       # Axios configuration
+│   └── App.jsx            # Root component
+
+4.2 AUTHENTICATION FLOW
+-----------------------
+1. User enters credentials on Login page
+2. Frontend sends POST request to /api/auth/login
+3. Backend validates credentials, returns JWT token
+4. Token stored in localStorage
+5. All subsequent requests include Authorization header
+6. Token automatically refreshed before expiration
+
+4.3 STATE MANAGEMENT
+--------------------
+The application uses a lightweight state management approach:
+- React's built-in useState and useContext hooks
+- localStorage for persistent authentication state
+- Local component state for UI interactions
+
+4.4 API COMMUNICATION
+---------------------
+All API calls use Axios with:
+- Base URL: http://localhost:8000/api
+- Automatic token injection via interceptors
+- Error handling with toast notifications
+- Request/response logging in development
+
+
+================================================================================
+SECTION 5: BACKEND ARCHITECTURE
+================================================================================
+
+5.1 PROJECT STRUCTURE
+---------------------
+backend/
+├── main.py                 # FastAPI application entry point
+├── api/
+│   ├── routes/             # API route handlers
+│   │   ├── auth.py         # Authentication endpoints
+│   │   ├── courses.py      # Course management
+│   │   ├── quiz.py         # Quiz generation & submission
+│   │   ├── chat.py         # AI chat endpoints
+│   │   ├── analytics.py    # Progress tracking
+│   │   ├── cram.py         # Cram mode
+│   │   └── exam_prediction.py # Exam prediction
+│   ├── models/             # SQLAlchemy models
+│   │   ├── user.py         # User model
+│   │   ├── course.py       # Course model
+│   │   ├── concept.py      # Concept model
+│   │   ├── quiz.py         # Quiz & Question models
+│   │   └── chat.py         # Chat message model
+│   ├── middleware/         # Request middleware
+│   │   ├── auth.py         # JWT authentication
+│   │   ├── logging.py      # Request logging
+│   │   └── error_handler.py# Global error handling
+│   └── schemas.py          # Pydantic schemas
+├── agents/                 # AI Agent implementations
+│   ├── base_agent.py       # Base agent class
+│   ├── orchestrator.py     # Agent coordinator
+│   ├── content_ingestion.py# File processing
+│   ├── concept_extractor.py# Concept extraction
+│   ├── quiz_generator.py   # Quiz creation
+│   ├── exam_predictor.py   # Exam prediction
+│   ├── confusion_detector.py# Learning analysis
+│   └── explanation_builder.py# Explanations
+├── core/                   # Core services
+│   ├── config.py           # Configuration settings
+│   ├── database.py         # Database connection
+│   ├── llm.py              # Gemini LLM wrapper
+│   ├── embeddings.py       # Text embeddings
+│   ├── vector_store.py     # FAISS vector store
+│   ├── rag.py              # RAG pipeline
+│   └── monitoring.py       # Metrics & monitoring
+└── tests/                  # Test suite
+
+5.2 FASTAPI APPLICATION
+-----------------------
+The main FastAPI application (main.py) configures:
+
+• Lifespan Management: Database table creation on startup, cleanup on shutdown
+• CORS Middleware: Allows frontend origins (localhost:3000, 5173, 5174)
+• Request Logging: Logs all incoming requests with timing
+• Error Handling: Global exception handlers for consistent error responses
+• Route Registration: All API routers mounted under /api prefix
+
+5.3 API ENDPOINTS
+-----------------
+Authentication (/api/auth/):
+  POST /register     - Create new user account
+  POST /login        - Authenticate and get JWT token
+  GET  /user         - Get current user profile
+
+Courses (/api/courses/):
+  GET  /             - List user's courses
+  POST /             - Create new course
+  GET  /{id}         - Get course details
+  PUT  /{id}         - Update course
+  DELETE /{id}       - Delete course
+  POST /{id}/upload  - Upload course material
+
+Quiz (/api/quiz/):
+  POST /generate     - Generate quiz from course concepts
+  GET  /             - List completed quizzes
+  POST /submit       - Submit quiz answers
+  POST /answer       - Submit single answer (real-time feedback)
+
+Chat (/api/chat/):
+  POST /message      - Send message to AI tutor
+  GET  /history      - Get conversation history
+  DELETE /history    - Clear conversation
+
+Analytics (/api/analytics/):
+  GET  /progress     - Get learning progress
+  GET  /concepts     - Get concept mastery levels
+  GET  /confusion    - Get confusion patterns
+
+Cram Mode (/api/cram/):
+  POST /session      - Start cram session
+  GET  /cards        - Get flashcards
+  POST /card/review  - Submit card review
+
+Exam Prediction (/api/exam/):
+  GET  /predictions  - Get predicted exam questions
+  POST /solution     - Get solution for prediction
+
+5.4 DATABASE MODELS
+-------------------
+User:
+  - id (UUID, primary key)
+  - email (unique)
+  - full_name
+  - password_hash (bcrypt)
+  - created_at, updated_at
+
+Course:
+  - id (UUID, primary key)
+  - user_id (foreign key)
+  - name, description, code
+  - created_at, updated_at
+
+Material:
+  - id (UUID, primary key)
+  - course_id (foreign key)
+  - filename, file_type, file_size
+  - processed (boolean)
+  - chunk_count
+
+Concept:
+  - id (UUID, primary key)
+  - course_id (foreign key)
+  - name, definition, category
+  - importance_score (0-10)
+  - difficulty (easy/medium/hard)
+  - exam_probability (0-100)
+  - mastery_level (0-1)
+  - times_reviewed, times_correct, times_incorrect
+  - prerequisites, related_concepts (JSON)
+
+Quiz:
+  - id (UUID, primary key)
+  - user_id, course_id (foreign keys)
+  - title, quiz_type, difficulty
+  - total_questions, answered_questions, correct_answers
+  - score (percentage)
+  - status (active/completed/abandoned)
+
+Question:
+  - id (UUID, primary key)
+  - quiz_id, concept_id (foreign keys)
+  - question_text, question_type
+  - options (JSON array)
+  - correct_answer, explanation
+  - user_answer, is_correct
+  - difficulty
+
+ChatMessage:
+  - id (UUID, primary key)
+  - user_id, course_id (foreign keys)
+  - conversation_id
+  - role (user/assistant)
+  - content
+  - context_used (JSON)
+
+ConfusionPattern:
+  - id (UUID, primary key)
+  - user_id, concept_id (foreign keys)
+  - pattern_type, description
+  - question, user_answer, correct_answer
+  - score, intervention
+
+
+================================================================================
+SECTION 6: AI AGENTS ARCHITECTURE (MULTI-AGENT SYSTEM)
+================================================================================
+
+The system uses a multi-agent architecture where each agent specializes in a 
+specific task. All agents inherit from BaseAgent which provides common 
+functionality including LLM access and logging.
+
+6.1 BASE AGENT CLASS
+--------------------
+All agents extend BaseAgent which provides:
+- Automatic LLM initialization (GeminiLLM singleton)
+- Structured logging with agent name
+- Action logging for debugging (_log_action method)
+- Async run() method pattern
+
+6.2 CONTENT INGESTION AGENT
+---------------------------
+File: agents/content_ingestion.py
+Purpose: Process uploaded course materials and extract text content.
+
+Capabilities:
+- PDF extraction using PyPDF2 and pdfplumber
+- DOCX extraction using python-docx
+- PPTX extraction using python-pptx
+- Audio transcription using Whisper (future)
+- Video audio extraction and transcription (future)
+- Image OCR using pytesseract (future)
+
+Text Chunking:
+- Splits extracted text into overlapping chunks
+- Default chunk size: 1000 characters
+- Default overlap: 200 characters
+- Preserves source and page information in metadata
+
+Process Flow:
+1. Receive file path and type
+2. Call appropriate processor (_process_pdf, _process_docx, etc.)
+3. Extract raw text with page/slide numbers
+4. Chunk text into embedding-sized pieces
+5. Return chunks with metadata for vector storage
+
+6.3 CONCEPT EXTRACTOR AGENT
+---------------------------
+File: agents/concept_extractor.py
+Purpose: Extract key educational concepts from course materials.
+
+LLM Extraction:
+- Sends text to Gemini Pro with extraction prompt
+- Requests: name, definition, importance (1-10), difficulty, exam probability
+- Returns structured JSON array of concepts
+- Deduplicates across multiple chunks
+
+Fallback Extraction (when LLM unavailable):
+- Uses intelligent heuristics and NLP techniques
+- Filters garbage content (slide titles, metadata, names)
+- Pattern matching for educational terminology
+- Assigns default importance based on frequency
+
+Garbage Filtering (is_garbage_or_name function):
+- Detects personally identifying names
+- Filters slide/page headers (e.g., "SLIDE 7: Title")
+- Removes presentation artifacts ("Page X", "Section X")
+- Filters non-educational keywords (company names, generic phrases)
+- Removes long concatenated strings (PDF parsing artifacts)
+
+Knowledge Graph Generation:
+- Creates nodes for each concept
+- Links concepts via prerequisites and related_concepts
+- Outputs graph data for visualization
+
+6.4 QUIZ GENERATOR AGENT
+------------------------
+File: agents/quiz_generator.py
+Purpose: Generate personalized quiz questions from course concepts.
+
+Question Types:
+- MCQ (Multiple Choice Questions) - 4 options with 1 correct
+- True/False questions
+- Short Answer questions
+- Problem Solving questions (for computation/application)
+
+RAG-Enhanced Generation:
+1. Receive concepts to quiz on
+2. Retrieve relevant context from vector store
+3. Build enriched concept descriptions with RAG context
+4. Generate questions using Gemini Pro
+5. Parse JSON response into question objects
+
+Distractor Generation:
+- LLM generates plausible wrong answers
+- Considers concept relationships for believable distractors
+- Falls back to template-based distractors if LLM fails
+
+Adaptive Difficulty:
+- Tracks user history per concept
+- Increases difficulty for frequently correct concepts
+- Decreases difficulty for struggling concepts
+- Adjusts question complexity accordingly
+
+Fallback Generation (when LLM unavailable):
+- Template-based question construction
+- Uses concept names and definitions
+- Generates terminology-based questions
+- Creates definition-matching questions
+
+6.5 EXAM PREDICTOR AGENT
+------------------------
+File: agents/exam_predictor.py
+Purpose: Predict likely exam questions based on content analysis.
+
+Prediction Algorithm:
+1. Sort concepts by exam_probability (0-100%)
+2. Weight by importance_score (1-10)
+3. Combined formula: exam_prob * 0.6 + importance * 0.4
+4. Select top N concepts for prediction
+
+Question Generation:
+- Retrieves RAG context for each concept
+- Generates exam-realistic questions
+- Mixes question types (conceptual, application, problem-solving)
+- Assigns difficulty and probability scores
+
+Solution Generation:
+- Provides step-by-step solutions on request
+- Uses RAG context for accurate explanations
+- Includes formulas and key concepts
+
+6.6 CONFUSION DETECTOR AGENT
+----------------------------
+File: agents/confusion_detector.py
+Purpose: Detect learning confusion patterns from incorrect answers.
+
+LLM-Based Analysis:
+1. Receive wrong answer with question and correct answer
+2. Send to Gemini Pro for misconception analysis
+3. Identify specific confusion type
+4. Suggest intervention strategy
+
+Pattern Detection:
+- confusion_type: What specifically was misunderstood
+- confused_with: What concept they likely mixed up
+- intervention: Targeted study recommendation
+- score: Severity of misconception (0-1)
+
+Fallback Analysis:
+- Generates meaningful patterns from question/concept
+- Detects term confusion, incomplete understanding
+- Creates study recommendations based on error type
+
+Pattern Summarization:
+- Aggregates patterns across multiple questions
+- Identifies most common confusion areas
+- Generates actionable recommendations
+
+6.7 EXPLANATION BUILDER AGENT
+-----------------------------
+File: agents/explanation_builder.py
+Purpose: Generate custom explanations and mnemonics.
+
+Capabilities:
+- Generate detailed concept explanations
+- Create mnemonics (acronyms, rhymes, stories, visuals)
+- Answer questions using RAG context
+- Tailor explanations to confusion type
+
+Mnemonic Generation:
+- Creates memory aids for difficult concepts
+- Supports multiple mnemonic types
+- Provides examples and applications
+
+
+================================================================================
+SECTION 7: RAG (RETRIEVAL-AUGMENTED GENERATION) PIPELINE
+================================================================================
+
+7.1 RAG SYSTEM OVERVIEW
+-----------------------
+File: core/rag.py
+
+The RAG pipeline enables context-aware AI responses by combining semantic 
+search with LLM generation. This ensures answers are grounded in the user's
+actual course materials rather than general knowledge.
+
+RAG Pipeline Steps:
+1. Query → Embedding: Convert user question to vector
+2. Vector Search → Relevant Chunks: Find similar text chunks
+3. Reranking → Top Chunks: Prioritize most relevant results
+4. Context Assembly → LLM Prompt: Build context-enriched prompt
+5. Generation → Answer: Generate response with Gemini Pro
+
+7.2 RAGSystem CLASS
+-------------------
+Initialization:
+- Loads VectorStore singleton for semantic search
+- Loads GeminiLLM singleton for generation
+
+query() Method:
+- Searches vector store for similar chunks
+- Retrieves more results for reranking (top_k * 2)
+- Applies reranking algorithm
+- Returns top_k most relevant chunks
+
+_rerank() Method:
+- Considers:
+  • Semantic similarity (from vector search)
+  • Importance score (concept relevance)
+  • Source recency (newer materials)
+- Calculates composite rerank_score
+- Sorts by rerank_score descending
+
+generate_answer() Method:
+- Retrieves relevant chunks
+- Builds context string from chunks (max 4000 tokens)
+- Constructs prompt with context and question
+- Generates answer using Gemini Pro (temperature=0.3 for accuracy)
+- Calculates confidence based on chunk scores
+- Returns RAGResult with answer, sources, and confidence
+
+Context Building:
+- Formats chunks with source attribution
+- Includes page numbers when available
+- Respects token limits (~4000 tokens)
+- Truncates if necessary
+
+7.3 RAGResult DATACLASS
+-----------------------
+answer: str         - Generated response text
+sources: List[Dict] - Source attributions (file, page, score)
+confidence: float   - Confidence score (0-1)
+
+
+================================================================================
+SECTION 8: VECTOR STORE (FAISS)
+================================================================================
+
+8.1 VECTOR STORE OVERVIEW
+-------------------------
+File: core/vector_store.py
+
+FAISS (Facebook AI Similarity Search) is used for efficient similarity search
+over high-dimensional vectors. Each course has its own isolated vector index.
+
+8.2 VectorStore CLASS
+---------------------
+Structure:
+- Per-course FAISS indices stored on disk
+- Metadata stored in JSON files alongside indices
+- Indices loaded on-demand and cached in memory
+
+add_chunks() Method:
+1. Receive chunks with text and metadata
+2. Generate embeddings using sentence-transformers
+3. Create ChunkMetadata objects with:
+   - chunk_id (UUID)
+   - course_id, material_id
+   - text, source, page
+   - importance_score
+   - timestamp
+4. Add vectors to FAISS index
+5. Save index and metadata to disk
+
+search() Method:
+1. Generate embedding for query
+2. Search FAISS index for nearest neighbors
+3. Retrieve metadata for matched vectors
+4. Return chunks with similarity scores
+
+Index Management:
+- _load_index(): Load existing index from disk
+- _save_index(): Persist index to disk
+- delete_course_index(): Remove course data
+- get_stats(): Get index statistics
+
+8.3 ChunkMetadata DATACLASS
+---------------------------
+- chunk_id: Unique identifier
+- course_id: Owner course
+- material_id: Source material
+- text: Chunk content (up to 1000 chars)
+- source: Original filename
+- page: Page number (if applicable)
+- importance_score: Content importance (0-1)
+- created_at: Timestamp
+
+
+================================================================================
+SECTION 9: EMBEDDING SERVICE
+================================================================================
+
+9.1 OVERVIEW
+------------
+File: core/embeddings.py
+
+Text embeddings convert text into dense vector representations that capture
+semantic meaning, enabling similarity search.
+
+9.2 EMBEDDING MODEL
+-------------------
+Model: sentence-transformers/all-MiniLM-L6-v2
+- Dimensions: 384
+- Optimized for semantic similarity
+- Fast inference on CPU
+- Multilingual support
+
+9.3 EmbeddingService CLASS
+--------------------------
+embed_text() Method:
+- Input: Single text string
+- Output: 384-dimensional numpy array
+- Normalizes and encodes text
+
+embed_batch() Method:
+- Input: List of text strings
+- Output: List of 384-dimensional arrays
+- Batch processing for efficiency
+
+Singleton Pattern:
+- get_embedding_service() returns cached instance
+- Initialized on first use
+
+
+================================================================================
+SECTION 10: LLM INTEGRATION (GOOGLE GEMINI)
+================================================================================
+
+10.1 OVERVIEW
+-------------
+File: core/llm.py
+
+Google's Gemini Pro 1.5 serves as the primary LLM for all text generation
+tasks including concept extraction, quiz generation, and Q&A.
+
+10.2 GeminiLLM CLASS CONFIGURATION
+----------------------------------
+Model: gemini-1.5-pro
+Generation Config:
+- temperature: 0.7 (balanced creativity)
+- top_p: 0.95 (nucleus sampling)
+- top_k: 40 (top-k sampling)
+- max_output_tokens: 1000 (optimized for speed)
+
+Safety Settings:
+- Harassment: BLOCK_NONE
+- Hate Speech: BLOCK_NONE
+- Sexually Explicit: BLOCK_MEDIUM_AND_ABOVE
+- Dangerous Content: BLOCK_NONE
+(Relaxed for educational content)
+
+10.3 GENERATION METHODS
+-----------------------
+generate():
+- Basic text generation from prompt
+- Supports custom temperature and max_tokens
+- Includes retry logic and fallback
+
+extract_concepts():
+- Specialized prompt for concept extraction
+- Returns JSON array of concepts
+- Handles parsing errors gracefully
+
+generate_quiz_questions():
+- Creates quiz prompts for specific question types
+- Ensures proper formatting and distractors
+- Validates output structure
+
+generate_explanation():
+- Creates detailed educational explanations
+- Considers student level and confusion type
+- Uses RAG context when available
+
+answer_question():
+- RAG-aware Q&A generation
+- Incorporates conversation history
+- OPTIMIZED PROMPTS for concise, structured responses:
+  * 3-5 bullet points or 2-3 short paragraphs
+  * Key terms in bold
+  * Offers to expand on complex topics
+  * No cut-off answers
+
+generate_mnemonic():
+- Creates memory aids (acronyms, rhymes, stories)
+- Relates to concept definition
+- Provides examples
+
+10.4 FALLBACK HANDLING
+----------------------
+When API calls fail:
+- Logs error with full details
+- Returns helpful fallback message
+- Suggests manual review
+- Never crashes the application
+
+
+================================================================================
+SECTION 11: DATABASE DESIGN
+================================================================================
+
+11.1 DATABASE TECHNOLOGY
+------------------------
+SQLite with async driver (aiosqlite)
+- Lightweight, file-based database
+- Full ACID compliance
+- Perfect for single-user or small-scale deployments
+- Easy to backup and migrate
+
+SQLAlchemy 2.0 with async support:
+- Modern ORM with type hints
+- Async session management
+- Automatic table creation
+
+11.2 ENTITY RELATIONSHIP
+------------------------
+User (1) ←→ (N) Course
+Course (1) ←→ (N) Material
+Course (1) ←→ (N) Concept
+Course (1) ←→ (N) Quiz
+User (1) ←→ (N) Quiz
+Quiz (1) ←→ (N) Question
+Concept (1) ←→ (N) Question
+User (1) ←→ (N) ChatMessage
+User (1) ←→ (N) ConfusionPattern
+
+11.3 DATA ISOLATION
+-------------------
+Multi-user data isolation implemented at application level:
+- All queries filter by user_id
+- Courses, quizzes, chats isolated per user
+- No cross-user data leakage
+
+
+================================================================================
+SECTION 12: AUTHENTICATION & SECURITY
+================================================================================
+
+12.1 JWT AUTHENTICATION
+-----------------------
+File: api/middleware/auth.py
+
+Token Structure:
+- Algorithm: HS256
+- Expiration: 24 hours (ACCESS_TOKEN_EXPIRE_MINUTES)
+- Payload: user_id, email, exp
+
+Token Flow:
+1. User logs in with email/password
+2. Server validates credentials
+3. Server creates JWT with user data
+4. Client stores token in localStorage
+5. Client sends token in Authorization header
+6. Server validates token on each request
+
+12.2 PASSWORD SECURITY
+----------------------
+- Bcrypt hashing with automatic salting
+- Cost factor: 12 (210K iterations)
+- Passwords never stored in plaintext
+- Constant-time comparison to prevent timing attacks
+
+12.3 MIDDLEWARE
+---------------
+RequestLoggingMiddleware:
+- Logs all requests with timing
+- Generates unique request IDs
+- Tracks response status codes
+
+ErrorHandler:
+- Catches all exceptions
+- Returns standardized error responses
+- Logs errors with stack traces
+
+
+================================================================================
+SECTION 13: DEPLOYMENT & DOCKER
+================================================================================
+
+13.1 DOCKERFILE (BACKEND)
+-------------------------
+FROM python:3.11-slim
+
+Key Steps:
+1. Set working directory to /app
+2. Install system dependencies
+3. Copy requirements.txt and install Python packages
+4. Copy application code
+5. Expose port 8000
+6. Run uvicorn with production settings
+
+13.2 DOCKERFILE (FRONTEND)
+--------------------------
+Multi-stage build:
+
+Stage 1 (build):
+- Node.js base image
+- Install dependencies
+- Build production bundle
+
+Stage 2 (production):
+- Nginx base image
+- Copy built files
+- Configure nginx for SPA routing
+
+13.3 DOCKER COMPOSE
+-------------------
+Services:
+- backend: FastAPI application (port 8000)
+- frontend: Nginx serving React (port 80/3000)
+
+Volumes:
+- ./data:/app/data (database persistence)
+- ./uploads:/app/uploads (file storage)
+
+Networks:
+- Internal bridge network for service communication
+
+13.4 ENVIRONMENT VARIABLES
+--------------------------
+Backend (.env):
+- GEMINI_API_KEY: Google AI API key
+- SECRET_KEY: JWT signing key
+- DATABASE_URL: SQLite connection string
+- ENVIRONMENT: development/production
+- DEBUG: Enable debug mode
+- HOST: Server host (0.0.0.0)
+- PORT: Server port (8000)
+
+Frontend:
+- VITE_API_URL: Backend API URL
+
+
+================================================================================
+SECTION 14: CI/CD PIPELINE
+================================================================================
+
+14.1 GITHUB ACTIONS WORKFLOW
+----------------------------
+File: .github/workflows/ci.yml
+
+Jobs:
+1. test-backend:
+   - Checkout code
+   - Setup Python 3.11
+   - Install dependencies
+   - Run flake8 linting
+   - Run pytest with coverage
+
+2. test-frontend:
+   - Checkout code
+   - Setup Node.js
+   - Install dependencies
+   - Run ESLint
+   - Build production bundle
+
+3. build-docker:
+   - Build backend Docker image
+   - Build frontend Docker image
+   - (Push to registry on main branch)
+
+14.2 TESTING STRATEGY
+---------------------
+Backend Tests (pytest):
+- Unit tests for agents
+- Integration tests for API endpoints
+- Authentication flow tests
+- Course management tests
+- Data isolation tests
+
+Test Coverage:
+- Minimum 35% coverage enforced
+- Coverage report generated as XML
+- Uploaded to coverage dashboard
+
+
+================================================================================
+SECTION 15: KEY ALGORITHMS & PROCESSES
+================================================================================
+
+15.1 DOCUMENT PROCESSING FLOW
+-----------------------------
+1. User uploads file via frontend
+2. File sent to /api/courses/{id}/upload
+3. ContentIngestionAgent processes file:
+   a. Detect file type (PDF, DOCX, PPTX)
+   b. Extract text with page/slide info
+   c. Chunk text (1000 chars, 200 overlap)
+4. Chunks added to VectorStore:
+   a. Generate embeddings for each chunk
+   b. Store in course-specific FAISS index
+5. ConceptExtractorAgent analyzes chunks:
+   a. LLM extracts key concepts
+   b. Assigns importance and difficulty
+   c. Identifies relationships
+6. Concepts stored in SQLite database
+7. Material marked as processed
+
+15.2 QUIZ GENERATION FLOW
+-------------------------
+1. Request quiz via /api/quiz/generate
+2. Retrieve course concepts from database
+3. Select concepts based on:
+   - Difficulty preference
+   - User mastery levels (adaptive)
+   - Random sampling for variety
+4. QuizGeneratorAgent generates questions:
+   a. Retrieve RAG context for each concept
+   b. Construct LLM prompt with context
+   c. Generate questions with distractors
+5. Create Quiz record in database
+6. Create Question records linked to quiz
+7. Return quiz to frontend
+
+15.3 CHAT (Q&A) FLOW
+--------------------
+1. User sends message to /api/chat/message
+2. Retrieve conversation history
+3. RAG Pipeline activation:
+   a. Embed user query
+   b. Search vector store for context
+   c. Retrieve top-k chunks (default: 5)
+   d. Rerank by relevance and importance
+4. Build LLM prompt with:
+   - System instruction for tutor role
+   - Retrieved context
+   - Conversation history
+   - User question
+5. Generate response with Gemini Pro
+6. Store message and response in database
+7. Return response with sources
+
+15.4 EXAM PREDICTION FLOW
+-------------------------
+1. Request predictions via /api/exam/predictions
+2. Load all course concepts
+3. Sort by exam_probability * 0.6 + importance * 0.4
+4. Take top N concepts (default: 10)
+5. For each concept:
+   a. Retrieve RAG context
+   b. Generate exam-style question
+   c. Assign probability and difficulty
+6. Return predictions with metadata
+
+
+================================================================================
+SECTION 16: PERFORMANCE OPTIMIZATIONS
+================================================================================
+
+16.1 LLM RESPONSE OPTIMIZATION
+------------------------------
+- max_output_tokens reduced to 1000 (from 2048)
+- Prompts optimized for concise, structured responses
+- Bullet points and short paragraphs encouraged
+- "Need more detail?" pattern for complex topics
+
+16.2 ASYNC ARCHITECTURE
+-----------------------
+- Full async/await throughout backend
+- Non-blocking database operations
+- Concurrent API requests supported
+- Background task processing
+
+16.3 CACHING
+------------
+- Vector store indices cached in memory
+- LLM singleton instance
+- Embedding service singleton
+- Database session pooling
+
+16.4 VECTOR SEARCH OPTIMIZATION
+-------------------------------
+- Per-course index isolation
+- FAISS IndexFlatL2 for accuracy
+- Metadata stored separately (JSON)
+- On-demand index loading
+
+
+================================================================================
+SECTION 17: ERROR HANDLING & MONITORING
+================================================================================
+
+17.1 GLOBAL ERROR HANDLING
+--------------------------
+File: api/middleware/error_handler.py
+
+Handles:
+- HTTPException: Standard HTTP errors
+- ValidationError: Pydantic validation failures
+- SQLAlchemyError: Database errors
+- Generic Exception: Unexpected errors
+
+Response Format:
+{
+  "error": true,
+  "message": "Error description",
+  "detail": "Additional details",
+  "code": "ERROR_CODE"
+}
+
+17.2 LOGGING
+------------
+File: api/middleware/logging.py
+
+Structured JSON logging:
+- Timestamp
+- Log level
+- Logger name
+- Message
+- Module, function, line
+- Request ID (for tracing)
+
+Log Levels:
+- DEBUG: Development details
+- INFO: Request/response, startup
+- WARNING: Recoverable issues
+- ERROR: Failures requiring attention
+
+17.3 METRICS
+------------
+File: core/monitoring.py
+
+Prometheus-compatible metrics:
+- Request count by endpoint
+- Response times (histogram)
+- Error rates
+- Active connections
+
+
+================================================================================
+SECTION 18: FUTURE ENHANCEMENTS
+================================================================================
+
+18.1 PLANNED FEATURES
+---------------------
+- Audio/video transcription with Whisper
+- Real-time collaborative study sessions
+- Spaced repetition scheduling
+- Mobile application (React Native)
+- Multiple LLM provider support
+- Export to Anki flashcards
+
+18.2 SCALABILITY IMPROVEMENTS
+-----------------------------
+- PostgreSQL migration for production
+- Redis caching layer
+- Kubernetes deployment
+- Load balancing
+- CDN for static assets
+
+
+================================================================================
+SECTION 19: CONCLUSION
+================================================================================
+
+StudyBuddy AI represents a comprehensive AI-powered educational platform that 
+leverages modern technologies and best practices. The multi-agent architecture
+provides flexibility and specialization, while the RAG pipeline ensures accurate,
+context-aware responses. The system is designed for extensibility, allowing
+new agents and features to be added with minimal changes to the core architecture.
+
+Key Engineering Achievements:
+• Clean separation of concerns with modular architecture
+• Robust error handling and fallback mechanisms
+• Optimized LLM usage for speed and cost
+• Comprehensive testing and CI/CD pipeline
+• Docker-based deployment for easy scaling
+• Security best practices with JWT and bcrypt
+
+The platform successfully demonstrates how AI can transform education by providing
+personalized, intelligent assistance to students while maintaining a clean,
+maintainable codebase.
+
+================================================================================
+                                END OF DOCUMENT
+================================================================================

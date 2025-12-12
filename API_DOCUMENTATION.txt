@@ -1,0 +1,406 @@
+================================================================================
+                    STUDYBUDDY AI - API DOCUMENTATION
+              (Narrative Style for Engineering Report)
+================================================================================
+
+
+INTRODUCTION TO THE API LAYER
+=============================
+
+The StudyBuddy AI platform exposes a RESTful API built using FastAPI, a modern, 
+high-performance Python web framework. The API serves as the communication bridge 
+between the React frontend and the backend AI systems, handling everything from 
+user authentication to AI-powered quiz generation and intelligent tutoring.
+
+The API follows REST principles and uses JSON for all request and response bodies.
+All endpoints are prefixed with "/api" and organized into logical groups based on
+functionality. The API also includes auto-generated interactive documentation 
+available at "/docs" (Swagger UI) and "/redoc" (ReDoc).
+
+
+AUTHENTICATION SYSTEM
+=====================
+
+The authentication system implements JSON Web Token (JWT) based authentication,
+which is a stateless authentication mechanism ideal for modern web applications.
+
+USER REGISTRATION PROCESS:
+When a new user registers, they provide their email, password, and optional 
+full name. The system first checks if the email is already registered to prevent
+duplicates. If the email is unique, the password is hashed using bcrypt with a
+cost factor of 12 (approximately 210,000 iterations), which provides strong 
+protection against brute-force attacks. After creating the user record in the
+database, the system immediately generates a JWT access token, allowing the user
+to be authenticated without requiring a separate login step.
+
+The registration endpoint accepts:
+- email: A valid, unique email address
+- password: Minimum 6 characters for security
+- full_name: Optional display name for personalization
+
+USER LOGIN PROCESS:
+For returning users, the login process validates credentials against the stored
+password hash using constant-time comparison to prevent timing attacks. Upon
+successful authentication, the system updates the last login timestamp and
+generates a fresh JWT token. The token contains the user's ID encoded in the
+"sub" (subject) claim and has an expiration time of 24 hours.
+
+TOKEN USAGE:
+All protected API endpoints require the JWT token to be included in the
+Authorization header using the Bearer scheme. The middleware automatically
+validates the token, checks expiration, and loads the current user's data
+before allowing the request to proceed to the endpoint handler.
+
+
+COURSE MANAGEMENT API
+=====================
+
+The course management system allows users to organize their study materials
+into distinct courses, each representing a subject or class they are studying.
+
+CREATING COURSES:
+Users can create new courses by providing a name and optional metadata such as
+a course code (e.g., "CS4063"), instructor name, description, and a color for
+UI display purposes. The course is automatically associated with the creating
+user, ensuring complete data isolation between users.
+
+MATERIAL UPLOAD SYSTEM:
+One of the most critical features is the ability to upload course materials.
+The system accepts various file formats:
+- PDF documents (lecture notes, textbooks)
+- DOCX files (Word documents)
+- PPTX files (PowerPoint presentations)
+- Text files (plain text notes)
+- Audio files (MP3, WAV for lecture recordings - future)
+- Video files (MP4 for lecture videos - future)
+
+When a file is uploaded, the system:
+1. Validates the file type against the allowed list
+2. Checks the file size (maximum 50MB per file)
+3. Generates a unique filename to prevent collisions
+4. Saves the file to the server's upload directory
+5. Creates a material record in the database
+6. Queues the file for background processing
+
+MATERIAL PROCESSING PIPELINE:
+After upload, materials enter an asynchronous processing pipeline:
+1. The Content Ingestion Agent extracts text from the file
+2. Text is chunked into overlapping segments (1000 chars with 200 overlap)
+3. Each chunk is embedded using sentence-transformers
+4. Embeddings are stored in the FAISS vector index
+5. The Concept Extractor Agent identifies key concepts
+6. Concepts are stored in the database with metadata
+
+CONCEPT EXTRACTION:
+The system automatically extracts educational concepts from uploaded materials.
+Each concept includes:
+- Name: The concept term or title
+- Definition: A clear explanation of the concept
+- Category: Topic grouping for organization
+- Importance Score: 1-10 rating of how important the concept is
+- Difficulty: Easy, medium, or hard classification
+- Exam Probability: Likelihood of appearing on exams (0-100%)
+
+
+QUIZ GENERATION API
+===================
+
+The quiz generation system is one of the core intelligent features of StudyBuddy AI,
+using AI agents to create personalized quiz questions from course materials.
+
+GENERATING A QUIZ:
+When a user requests a quiz, they specify:
+- The course to quiz on
+- Number of questions desired (1-50)
+- Difficulty level (easy, medium, hard, or adaptive)
+- Quiz type (practice, exam, cram, or adaptive)
+- Optional time limit in minutes
+- Optional specific topics to focus on
+
+The Quiz Generator Agent then:
+1. Retrieves relevant concepts from the course
+2. Uses RAG to fetch additional context from vector store
+3. Constructs prompts for the LLM with concept details
+4. Generates questions with multiple choice options
+5. Creates plausible distractor answers
+6. Stores questions in the database linked to the quiz
+
+QUESTION TYPES:
+The system supports multiple question formats:
+- Multiple Choice Questions (MCQ): Four options with one correct answer
+- True/False Questions: Binary choice questions
+- Short Answer Questions: Open-ended text responses
+- Problem Solving Questions: Computational or application questions
+
+Currently, the system defaults to MCQ format as it provides the best
+user experience and allows for automated grading.
+
+ANSWERING QUESTIONS:
+Users can submit answers in two ways:
+1. Real-time single answer submission: Immediate feedback after each question
+2. Batch submission: Submit all answers at once for final grading
+
+For real-time submission, the system immediately:
+- Validates the answer against the correct answer
+- Provides an explanation of why the answer is correct/incorrect
+- Updates the user's mastery level for the concept
+- Triggers the Confusion Detector if the answer was wrong
+
+QUIZ RESULTS AND ANALYTICS:
+After completing a quiz, users receive:
+- Overall score (percentage correct)
+- Breakdown of correct/incorrect answers
+- Time taken to complete
+- Personalized recommendations for weak areas
+- Updated concept mastery levels
+
+
+AI CHAT (INTELLIGENT TUTOR) API
+===============================
+
+The chat system provides an AI-powered tutoring experience where students can
+ask questions and receive intelligent, context-aware responses based on their
+course materials.
+
+HOW THE CHAT WORKS:
+When a user sends a message, the system follows the RAG (Retrieval-Augmented
+Generation) pipeline:
+
+1. QUERY EMBEDDING: The user's question is converted into a vector embedding
+   using the sentence-transformers model (all-MiniLM-L6-v2).
+
+2. SEMANTIC SEARCH: The vector store is searched for chunks that are semantically
+   similar to the user's question. The search is scoped to the user's courses
+   only, ensuring data isolation.
+
+3. CONTEXT RETRIEVAL: The top 3-5 most relevant chunks are retrieved, along with
+   their source information (which file and page they came from).
+
+4. RERANKING: Results are reranked based on multiple factors including semantic
+   similarity score and content importance.
+
+5. PROMPT CONSTRUCTION: A comprehensive prompt is built that includes:
+   - System instruction defining the AI's role as a tutor
+   - Retrieved context from course materials
+   - Conversation history for continuity
+   - The user's current question
+
+6. LLM GENERATION: Google Gemini Pro generates a response that is:
+   - Grounded in the course materials when possible
+   - Structured with bullet points and clear formatting
+   - Concise but comprehensive (3-5 key points)
+   - Offers to expand on complex topics
+
+7. SOURCE ATTRIBUTION: The response includes citations showing which materials
+   were used to generate the answer.
+
+CONVERSATION MANAGEMENT:
+The system maintains conversation history, allowing for multi-turn conversations
+where the AI remembers previous context. Conversations are stored in the database
+and can be retrieved for continuity across sessions.
+
+
+EXAM PREDICTION API
+===================
+
+The exam prediction feature uses AI analysis to predict which questions are most
+likely to appear on upcoming exams based on the course content.
+
+PREDICTION ALGORITHM:
+The Exam Predictor Agent analyzes concepts using a weighted scoring system:
+
+Combined Score = (Exam Probability × 0.6) + (Importance Score × 0.4)
+
+Concepts with higher combined scores are considered more likely to appear on
+exams. The agent then generates exam-style questions for these high-priority
+concepts.
+
+PREDICTION OUTPUT:
+Each prediction includes:
+- A full exam-style question
+- The type of question (conceptual, computational, application)
+- The concept being tested
+- Probability score (0-100%)
+- Difficulty level
+- Explanation of why this is likely to be tested
+
+SOLUTION GENERATION:
+Users can request detailed solutions for any predicted question. The system
+uses the RAG pipeline to fetch relevant context and generates step-by-step
+solutions that include:
+- Clear problem breakdown
+- Mathematical derivations where applicable
+- Key concepts and formulas used
+- Final answer with context
+
+
+ANALYTICS API
+=============
+
+The analytics system tracks learning progress and provides insights to help
+students understand their performance and identify areas for improvement.
+
+PROGRESS TRACKING:
+The system tracks:
+- Total study time across all sessions
+- Number of quizzes completed
+- Average quiz scores
+- Current study streak (consecutive days)
+- Concepts mastered vs. still learning
+
+CONCEPT MASTERY:
+Each concept has a mastery level (0-1) that updates based on quiz performance:
+- Correct answers increase mastery
+- Incorrect answers decrease mastery
+- The system uses a weighted average favoring recent performance
+
+Mastery levels are categorized as:
+- Mastered: >= 0.8 (concept well understood)
+- Learning: 0.3 - 0.8 (making progress)
+- To Start: < 0.3 (needs more study)
+
+CONFUSION PATTERN ANALYSIS:
+The Confusion Detector Agent analyzes incorrect answers to identify:
+- Specific misconceptions students have
+- Concepts that are commonly confused with each other
+- Targeted interventions to correct misunderstandings
+
+This data is aggregated to show:
+- Most common error patterns
+- Weak areas that need attention
+- Personalized study recommendations
+
+
+CRAM MODE API
+=============
+
+Cram Mode provides focused study sessions using flashcard-based spaced repetition.
+
+STARTING A SESSION:
+Users can start a cram session specifying:
+- The course to study
+- Duration in minutes (default: 30)
+- Whether to focus on weak areas (recommended)
+
+The system selects concepts based on:
+- Current mastery levels (prioritizing weak areas)
+- Time since last review
+- Importance scores
+
+FLASHCARD SYSTEM:
+Flashcards are generated with:
+- Front: A question about the concept
+- Back: The answer/definition
+- Difficulty rating
+- Priority based on weakness
+
+SPACED REPETITION:
+After reviewing each card, users rate their recall:
+- Again: Didn't remember (review immediately)
+- Hard: Struggled but got it (short interval)
+- Good: Normal recall (medium interval)
+- Easy: Perfect recall (longer interval)
+
+The system adjusts future review intervals based on these ratings.
+
+
+MNEMONIC GENERATION API
+=======================
+
+The mnemonic system helps students create memory aids for difficult concepts.
+
+SUPPORTED MNEMONIC TYPES:
+- Acronym: First letter of each word forms a memorable phrase
+- Rhyme: Concepts put into rhyming verse
+- Story: Narrative connecting concept elements
+- Visual: Description of mental imagery
+
+GENERATION PROCESS:
+The LLM analyzes the concept name and definition, then generates an appropriate
+mnemonic with:
+- The mnemonic itself
+- Explanation of how it relates to the concept
+- Tips for remembering
+
+
+ERROR HANDLING
+==============
+
+The API uses consistent error responses across all endpoints:
+
+All errors include:
+- error: Boolean flag (always true for errors)
+- message: Human-readable error description
+- detail: Additional context or null
+- code: Machine-readable error code
+
+HTTP Status Codes Used:
+- 200 OK: Successful request
+- 201 Created: Resource successfully created
+- 202 Accepted: Request accepted for processing
+- 204 No Content: Successful deletion
+- 400 Bad Request: Invalid request data
+- 401 Unauthorized: Authentication required
+- 403 Forbidden: Insufficient permissions
+- 404 Not Found: Resource doesn't exist
+- 413 Payload Too Large: File exceeds size limit
+- 422 Unprocessable Entity: Validation failed
+- 429 Too Many Requests: Rate limit exceeded
+- 500 Internal Server Error: Unexpected server error
+
+
+RATE LIMITING
+=============
+
+To ensure fair usage and protect system resources, rate limiting is implemented
+on a per-user basis:
+
+Rate Limits by Endpoint Type:
+- Authentication: 10 requests per minute
+- Quiz Generation: 20 requests per minute (LLM-intensive)
+- Chat Messages: 60 requests per minute
+- File Uploads: 10 requests per minute
+- General Endpoints: 100 requests per minute
+
+When a rate limit is exceeded, the API returns HTTP 429 with headers indicating
+when the limit will reset. Clients should implement exponential backoff when
+receiving rate limit errors.
+
+
+DATA ISOLATION AND SECURITY
+===========================
+
+The API implements strict data isolation to ensure users can only access
+their own data:
+
+1. All queries filter by the authenticated user's ID
+2. Course materials are stored in user-specific directories
+3. Vector indices are created per-course (owned by a single user)
+4. Conversation history is scoped to the user
+5. Quiz results and analytics are user-specific
+
+This multi-tenant architecture ensures complete privacy and data separation
+between users while maintaining a single deployment for efficiency.
+
+
+CONCLUSION
+==========
+
+The StudyBuddy AI API provides a comprehensive interface for all platform
+functionality, from basic CRUD operations to sophisticated AI-powered features.
+The design prioritizes:
+
+- Security through JWT authentication and password hashing
+- Performance through async operations and caching
+- Usability through consistent response formats and error handling
+- Scalability through rate limiting and background processing
+- Intelligence through integration with AI agents and RAG pipeline
+
+This API layer enables the frontend to deliver a seamless, intelligent
+learning experience while the backend handles the complex AI operations
+transparently.
+
+
+================================================================================
+                        END OF API DOCUMENTATION
+================================================================================
